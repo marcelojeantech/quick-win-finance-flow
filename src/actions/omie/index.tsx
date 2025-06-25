@@ -1,26 +1,44 @@
 import api from '@/api';
-import endpoints from '@/api/endpoints';
 import type { Receivable } from '@/types/receivables';
 import type { OmieReceivablesResponse, OmieClientResponse } from '@/types/omie';
-import { isMockMode } from '@/config/api';
+import API_CONFIG, { isMockMode } from '@/config/api';
 import * as mockActions from './mockActions';
+import axios from 'axios';
+// Pagination interface
+export interface PaginationParams {
+  pagina?: number;
+  registros_por_pagina?: number;
+}
+
+export interface PaginatedReceivablesResponse {
+  receivables: Receivable[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    recordsPerPage: number;
+    totalRecords: number;
+  };
+}
 
 // Real API functions
-async function getReceivablesReal() {
+async function getReceivablesReal(params: PaginationParams = {}): Promise<PaginatedReceivablesResponse> {
   try {
-    const response = await api.get<OmieReceivablesResponse>(
-      "https://api-r4b9.onrender.com/api/omie/receivables",
-      {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': '*',
-          'Access-Control-Allow-Headers': '*'
-        }
-      }
+    const pagina = params.pagina || 1;
+    const registros_por_pagina = params.registros_por_pagina || 50;
+    
+    console.log(pagina, registros_por_pagina);
+    console.log(API_CONFIG.NODE_ENV);
+    // Use your local backend URL instead of the Render URL
+    const baseUrl = API_CONFIG.NODE_ENV === 'production' 
+      ? 'https://api-r4b9.onrender.com'
+      : 'http://localhost:3001';
+    
+    const response = await axios.get<OmieReceivablesResponse>(
+      `${baseUrl}/api/omie/receivables?pagina=${pagina}&registros_por_pagina=${registros_por_pagina}`
     );
 
     // Transformar dados do Omie para o formato da aplicação
-    const receivables: Receivable[] = response.data.conta_receber_cadastro.map(item => {
+    const receivables: Receivable[] = response.data.conta_receber_cadastro?.map(item => {
       const vencimento = new Date(item.data_vencimento.split('/').reverse().join('-'));
       const hoje = new Date();
       const diasAtraso = item.status_titulo === 'ATRASADO' 
@@ -51,9 +69,17 @@ async function getReceivablesReal() {
         diasAtraso,
         codigoCliente: item.codigo_cliente_fornecedor,
       };
-    });
+    }) || [];
 
-    return { receivables };
+    return {
+      receivables,
+      pagination: {
+        currentPage: response.data.pagina || pagina,
+        totalPages: response.data.total_de_paginas || 1,
+        recordsPerPage: response.data.registros || registros_por_pagina,
+        totalRecords: response.data.total_de_registros || 0
+      }
+    };
   } catch (error) {
     console.error('Erro ao buscar recebíveis:', error);
     throw error;
@@ -62,20 +88,19 @@ async function getReceivablesReal() {
 
 async function getClientInfoReal(codigoCliente: number) {
   try {
-    const response = await api.post<OmieClientResponse>(
-      endpoints.omie.getClient,
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://your-backend-url.vercel.app' // Replace with your deployed backend URL
+      : 'http://localhost:3001';
+    
+    const response = await api.post<{ success: boolean; data: OmieClientResponse }>(
+      `${baseUrl}/api/omie/client`,
       {
-        call: 'ConsultarCliente',
-        param: [{ 
-          codigo_cliente_omie: codigoCliente
-        }],
-        app_key: process.env.OMIE_APP_KEY,
-        app_secret: process.env.OMIE_APP_SECRET
+        codigo_cliente_omie: codigoCliente
       }
     );
 
-    if (response.data.clientes_cadastro && response.data.clientes_cadastro.length > 0) {
-      const client = response.data.clientes_cadastro[0];
+    if (response.data.success && response.data.data.clientes_cadastro && response.data.data.clientes_cadastro.length > 0) {
+      const client = response.data.data.clientes_cadastro[0];
       return {
         nome: client.nome_fantasia || client.razao_social,
         email: client.email,
@@ -91,13 +116,13 @@ async function getClientInfoReal(codigoCliente: number) {
   }
 }
 
-async function getReceivablesWithClientInfoReal() {
+async function getReceivablesWithClientInfoReal(params: PaginationParams = {}): Promise<PaginatedReceivablesResponse> {
   try {
-    const { receivables } = await getReceivablesReal();
+    const result = await getReceivablesReal(params);
     
     // Buscar informações dos clientes para os primeiros 10 recebíveis
     const receivablesWithClientInfo = await Promise.all(
-      receivables.slice(0, 10).map(async (receivable) => {
+      result.receivables.slice(0, 10).map(async (receivable) => {
         if (receivable.codigoCliente) {
           const clientInfo = await getClientInfoReal(receivable.codigoCliente);
           if (clientInfo) {
@@ -113,7 +138,10 @@ async function getReceivablesWithClientInfoReal() {
       })
     );
 
-    return { receivables: receivablesWithClientInfo };
+    return {
+      ...result,
+      receivables: receivablesWithClientInfo
+    };
   } catch (error) {
     console.error('Erro ao buscar recebíveis com informações do cliente:', error);
     throw error;
@@ -121,11 +149,11 @@ async function getReceivablesWithClientInfoReal() {
 }
 
 // Export functions that use either real or mock API based on configuration
-export async function getReceivables() {
+export async function getReceivables(params: PaginationParams = {}) {
   if (isMockMode()) {
     return mockActions.getReceivables();
   }
-  return getReceivablesReal();
+  return getReceivablesReal(params);
 }
 
 export async function getClientInfo(codigoCliente: number) {
@@ -135,9 +163,9 @@ export async function getClientInfo(codigoCliente: number) {
   return getClientInfoReal(codigoCliente);
 }
 
-export async function getReceivablesWithClientInfo() {
-  if (isMockMode()) {
-    return mockActions.getReceivablesWithClientInfo();
-  }
-  return getReceivablesWithClientInfoReal();
+export async function getReceivablesWithClientInfo(params: PaginationParams = {}) {
+    if (isMockMode()) {
+      return mockActions.getReceivablesWithClientInfo();
+    }
+  return getReceivablesWithClientInfoReal(params);
 }

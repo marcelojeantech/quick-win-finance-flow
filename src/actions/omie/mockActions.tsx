@@ -2,7 +2,18 @@ import mockOmieApi from '@/api/mockOmie';
 import type { Receivable } from '@/types/receivables';
 import type { OmieReceivablesResponse, OmieClientResponse } from '@/types/omie';
 
-export async function getReceivables() {
+// Interface para compatibilidade com paginação
+export interface PaginatedReceivablesResponse {
+  receivables: Receivable[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    recordsPerPage: number;
+    totalRecords: number;
+  };
+}
+
+export async function getReceivables(): Promise<PaginatedReceivablesResponse> {
   try {
     const response = await mockOmieApi.getReceivables();
 
@@ -32,7 +43,7 @@ export async function getReceivables() {
         valor: item.valor_documento,
         vencimento: item.data_vencimento.split('/').reverse().join('-'),
         situacao,
-        linkNF: `https://nf.omie.com.br/${item.codigo_lancamento_omie}`,
+        linkNF: `https://nf.omie.com.br/${item.numero_documento_fiscal}`,
         ultimaAcao: `Registrado em ${item.data_registro}`,
         responsavel: 'Sistema Omie',
         diasAtraso,
@@ -40,7 +51,16 @@ export async function getReceivables() {
       };
     });
 
-    return { receivables };
+    // Retornar no formato paginado para compatibilidade
+    return {
+      receivables,
+      pagination: {
+        currentPage: 1,
+        totalPages: 1,
+        recordsPerPage: receivables.length,
+        totalRecords: receivables.length
+      }
+    };
   } catch (error) {
     console.error('Erro ao buscar recebíveis:', error);
     throw error;
@@ -68,13 +88,13 @@ export async function getClientInfo(codigoCliente: number) {
   }
 }
 
-export async function getReceivablesWithClientInfo() {
+export async function getReceivablesWithClientInfo(): Promise<PaginatedReceivablesResponse> {
   try {
-    const { receivables } = await getReceivables();
+    const result = await getReceivables();
     
     // Buscar informações dos clientes para os primeiros 10 recebíveis
     const receivablesWithClientInfo = await Promise.all(
-      receivables.slice(0, 10).map(async (receivable) => {
+      result.receivables.slice(0, 10).map(async (receivable) => {
         if (receivable.codigoCliente) {
           const clientInfo = await getClientInfo(receivable.codigoCliente);
           if (clientInfo) {
@@ -90,7 +110,10 @@ export async function getReceivablesWithClientInfo() {
       })
     );
 
-    return { receivables: receivablesWithClientInfo };
+    return {
+      ...result,
+      receivables: receivablesWithClientInfo
+    };
   } catch (error) {
     console.error('Erro ao buscar recebíveis com informações do cliente:', error);
     throw error;

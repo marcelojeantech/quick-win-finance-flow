@@ -35,6 +35,8 @@ export interface OmieReceivable {
   status_titulo: 'RECEBIDO' | 'ATRASADO' | 'A_RECEBER';
   tipo_agrupamento: string;
   valor_documento: number;
+  numero_documento: string;
+  numero_documento_fiscal: string;
   bloqueado?: string;
   bloquear_baixa?: string;
   data_emissao?: string;

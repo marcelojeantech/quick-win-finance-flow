@@ -11,7 +11,7 @@ export async function getReceivables() {
         call: 'ListarContasReceber',
         param: [{ 
           pagina: 1, 
-          registros_por_pagina: 100, 
+          registros_por_pagina: 50, 
           apenas_importado_api: 'N' 
         }],
         app_key: process.env.OMIE_APP_KEY,
@@ -59,26 +59,3 @@ export async function getReceivables() {
     throw error;
   }
 }
-
-export async function getClientInfo(codigoCliente: number) {
-  try {
-    const response = await api.get<OmieClientResponse>(
-      "https://api-r4b9.onrender.com/api/omie/receivables",
-    );
-
-    if (response.data.clientes_cadastro && response.data.clientes_cadastro.length > 0) {
-      const client = response.data.clientes_cadastro[0];
-      return {
-        nome: client.nome_fantasia || client.razao_social,
-        email: client.email,
-        telefone: client.telefone1,
-        cnpjCpf: client.cnpj_cpf
-      };
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Erro ao buscar cliente:', error);
-    return null;
-  }
-} 

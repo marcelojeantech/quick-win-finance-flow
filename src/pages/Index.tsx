@@ -7,10 +7,19 @@ import { toast } from "@/hooks/use-toast";
 import { FileText, Phone, Mail, AlertCircle, Clock, CheckCircle, DollarSign } from "lucide-react";
 import { Receivable } from "@/types/receivables";
 import ReceivablesTable from "@/components/ReceivablesTable";
+import { Pagination } from "@/components/Pagination";
 import CobrancaAutomatica from "@/components/CobrancaAutomatica";
 import ReemissaoNF from "@/components/ReemissaoNF";
-import { getReceivables } from '@/actions/omie';
+import { getReceivables, PaginationParams } from '@/actions/omie';
 import { isMockMode } from '@/config/api';
+
+// Interface para o estado da paginação
+interface PaginationState {
+  currentPage: number;
+  totalPages: number;
+  recordsPerPage: number;
+  totalRecords: number;
+}
 
 const Index = () => {
   const [receivables, setReceivables] = useState<Receivable[]>([]);
@@ -18,20 +27,58 @@ const Index = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Estado da paginação
+  const [pagination, setPagination] = useState<PaginationState>({
+    currentPage: 1,
+    totalPages: 1,
+    recordsPerPage: 50,
+    totalRecords: 0
+  });
 
-  // Função para buscar dados do Omie
-  const fetchOmieData = async () => {
+  // Função para buscar dados do Omie com paginação
+  const fetchOmieData = async (params: PaginationParams = {}) => {
     setIsLoading(true);
     try {
-      const { receivables: omieReceivables } = await getReceivables();
+      const paginationParams = {
+        pagina: params.pagina || pagination.currentPage,
+        registros_por_pagina: params.registros_por_pagina || pagination.recordsPerPage
+      };
+
+      console.log(paginationParams);
+      const result = await getReceivables(paginationParams);
       
-      setReceivables(omieReceivables);
-      setFilteredReceivables(omieReceivables);
-      
-      toast({
-        title: "Dados carregados com sucesso!",
-        description: `${omieReceivables.length} recebíveis importados do Omie.`,
-      });
+      // Verificar se o resultado tem paginação (modo real) ou não (modo mock)
+      if (result && typeof result === 'object' && 'pagination' in result && 'receivables' in result) {
+        // Resposta paginada
+        const paginatedResult = result as { receivables: Receivable[]; pagination: PaginationState };
+        setReceivables(paginatedResult.receivables);
+        setFilteredReceivables(paginatedResult.receivables);
+        setPagination(paginatedResult.pagination);
+        
+        toast({
+          title: "Dados carregados com sucesso!",
+          description: `${paginatedResult.receivables.length} recebíveis carregados (página ${paginatedResult.pagination.currentPage} de ${paginatedResult.pagination.totalPages}).`,
+        });
+      } else if (result && typeof result === 'object' && 'receivables' in result) {
+        // Resposta não paginada (modo mock)
+        const simpleResult = result as { receivables: Receivable[] };
+        setReceivables(simpleResult.receivables);
+        setFilteredReceivables(simpleResult.receivables);
+        
+        toast({
+          title: "Dados carregados com sucesso!",
+          description: `${simpleResult.receivables.length} recebíveis importados do Omie.`,
+        });
+      } else {
+        // Fallback para formato inesperado
+        console.warn('Formato de resposta inesperado:', result);
+        toast({
+          title: "Aviso",
+          description: "Dados carregados, mas formato inesperado.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error('Erro ao buscar dados do Omie:', error);
       toast({
@@ -46,6 +93,7 @@ const Index = () => {
 
   // Carregar dados iniciais
   useEffect(() => {
+    console.log('fetching data');
     fetchOmieData();
     
     // Show mock mode notification if enabled
@@ -57,7 +105,7 @@ const Index = () => {
     }
   }, []);
 
-  // Filtros
+  // Filtros locais (aplicados apenas nos dados da página atual)
   useEffect(() => {
     let filtered = receivables;
     
@@ -74,18 +122,27 @@ const Index = () => {
     setFilteredReceivables(filtered);
   }, [searchTerm, selectedStatus, receivables]);
 
-  // Calcular estatísticas
+  // Calcular estatísticas (baseado nos dados filtrados da página atual)
   const stats = {
-    total: receivables.length,
-    emAberto: receivables.filter(r => r.situacao === "Em aberto").length,
-    atrasados: receivables.filter(r => r.situacao === "Atrasado").length,
-    pagos: receivables.filter(r => r.situacao === "Pago").length,
-    valorTotal: receivables.reduce((sum, r) => sum + r.valor, 0),
-    valorAtrasado: receivables.filter(r => r.situacao === "Atrasado").reduce((sum, r) => sum + r.valor, 0)
+    total: pagination.totalRecords || receivables.length,
+    emAberto: filteredReceivables.filter(r => r.situacao === "Em aberto").length,
+    atrasados: filteredReceivables.filter(r => r.situacao === "Atrasado").length,
+    pagos: filteredReceivables.filter(r => r.situacao === "Pago").length,
+    valorTotal: filteredReceivables.reduce((sum, r) => sum + r.valor, 0),
+    valorAtrasado: filteredReceivables.filter(r => r.situacao === "Atrasado").reduce((sum, r) => sum + r.valor, 0)
   };
 
   const handleSyncOmie = () => {
-    fetchOmieData();
+    fetchOmieData({ pagina: 1, registros_por_pagina: pagination.recordsPerPage });
+  };
+
+  // Handlers da paginação
+  const handlePageChange = (page: number) => {
+    fetchOmieData({ pagina: page, registros_por_pagina: pagination.recordsPerPage });
+  };
+
+  const handleRecordsPerPageChange = (recordsPerPage: number) => {
+    fetchOmieData({ pagina: 1, registros_por_pagina: recordsPerPage });
   };
 
   return (
@@ -120,7 +177,12 @@ const Index = () => {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
+              <div className="text-2xl font-bold">{stats.total.toLocaleString()}</div>
+              {pagination.totalRecords > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Mostrando {filteredReceivables.length} desta página
+                </p>
+              )}
             </CardContent>
           </Card>
           
@@ -131,6 +193,7 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">{stats.emAberto}</div>
+              <p className="text-xs text-muted-foreground">Nesta página</p>
             </CardContent>
           </Card>
 
@@ -156,6 +219,7 @@ const Index = () => {
               <div className="text-2xl font-bold text-green-600">
                 R$ {stats.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </div>
+              <p className="text-xs text-muted-foreground">Nesta página</p>
             </CardContent>
           </Card>
         </div>
@@ -205,10 +269,24 @@ const Index = () => {
         </Card>
 
         {/* Tabela de Recebíveis */}
-        <ReceivablesTable 
-          receivables={filteredReceivables} 
-          onUpdate={setReceivables}
-        />
+        <div className="space-y-0">
+          <ReceivablesTable 
+            receivables={filteredReceivables} 
+            onUpdate={setReceivables}
+          />
+          
+          {/* Componente de Paginação */}
+          {pagination.totalRecords > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              totalRecords={pagination.totalRecords}
+              recordsPerPage={pagination.recordsPerPage}
+              onPageChange={handlePageChange}
+              onRecordsPerPageChange={handleRecordsPerPageChange}
+            />
+          )}
+        </div>
 
         {/* Módulos do MVP */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
