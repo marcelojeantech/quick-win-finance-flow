@@ -8,17 +8,14 @@ import * as mockActions from './mockActions';
 // Real API functions
 async function getReceivablesReal() {
   try {
-    const response = await api.post<OmieReceivablesResponse>(
-      endpoints.omie.getReceivables,
+    const response = await api.get<OmieReceivablesResponse>(
+      "https://api-r4b9.onrender.com/api/omie/receivables",
       {
-        call: 'ListarContasReceber',
-        param: [{ 
-          pagina: 1, 
-          registros_por_pagina: 100, 
-          apenas_importado_api: 'N' 
-        }],
-        app_key: process.env.OMIE_APP_KEY,
-        app_secret: process.env.OMIE_APP_SECRET
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': '*',
+          'Access-Control-Allow-Headers': '*'
+        }
       }
     );
 

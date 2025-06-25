@@ -62,16 +62,8 @@ export async function getReceivables() {
 
 export async function getClientInfo(codigoCliente: number) {
   try {
-    const response = await api.post<OmieClientResponse>(
-      endpoints.omie.getClient,
-      {
-        call: 'ConsultarCliente',
-        param: [{ 
-          codigo_cliente_omie: codigoCliente
-        }],
-        app_key: '3311674688322',
-        app_secret: 'bb54f7de07cff1d06c91d22c8b8086e5'
-      }
+    const response = await api.get<OmieClientResponse>(
+      "https://api-r4b9.onrender.com/api/omie/receivables",
     );
 
     if (response.data.clientes_cadastro && response.data.clientes_cadastro.length > 0) {
