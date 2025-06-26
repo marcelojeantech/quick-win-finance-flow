@@ -68,6 +68,7 @@ async function getReceivablesReal(params: PaginationParams = {}): Promise<Pagina
         responsavel: 'Sistema Omie',
         diasAtraso,
         codigoCliente: item.codigo_cliente_fornecedor,
+        email: 'marcelo.jean@brandlovers.ai'
       };
     }) || [];
 

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { ExternalLink, Phone, Mail, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { Receivable } from "@/types/receivables";
+import { EmailSender } from "@/components/EmailSender";
+import { WhatsAppSender } from "@/components/WhatsAppSender";
 
 interface ReceivablesTableProps {
   receivables: Receivable[];
@@ -62,6 +63,24 @@ const ReceivablesTable = ({ receivables, onUpdate }: ReceivablesTableProps) => {
     const updatedReceivables = receivables.map(r => 
       r.id === receivable.id 
         ? { ...r, ultimaAcao: `E-mail enviado em ${new Date().toLocaleDateString('pt-BR')}` }
+        : r
+    );
+    onUpdate(updatedReceivables);
+  };
+
+  const handleEmailSent = (receivableId: string) => {
+    const updatedReceivables = receivables.map(r => 
+      r.id === receivableId 
+        ? { ...r, ultimaAcao: `E-mail enviado em ${new Date().toLocaleDateString('pt-BR')}` }
+        : r
+    );
+    onUpdate(updatedReceivables);
+  };
+
+  const handleWhatsAppSent = (receivableId: string) => {
+    const updatedReceivables = receivables.map(r => 
+      r.id === receivableId 
+        ? { ...r, ultimaAcao: `WhatsApp enviado em ${new Date().toLocaleDateString('pt-BR')}` }
         : r
     );
     onUpdate(updatedReceivables);
@@ -154,13 +173,27 @@ const ReceivablesTable = ({ receivables, onUpdate }: ReceivablesTableProps) => {
                       )}
                       
                       {receivable.email && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEnviarEmail(receivable)}
-                        >
-                          <Mail className="h-3 w-3" />
-                        </Button>
+                        receivable.situacao === 'Atrasado' || 
+                        (receivable.situacao as string) === 'ATRASADO' || 
+                        receivable.situacao?.toLowerCase() === 'atrasado' ||
+                        (receivable.diasAtraso && receivable.diasAtraso > 0)
+                      ) && (
+                        <EmailSender 
+                          receivable={receivable} 
+                          variant="reminder"
+                        />
+                      )}
+                      
+                      {/* Botão de WhatsApp urgente para itens atrasados */}
+                      {(receivable.situacao === 'Atrasado' || 
+                        (receivable.situacao as string) === 'ATRASADO' || 
+                        receivable.situacao?.toLowerCase() === 'atrasado' ||
+                        (receivable.diasAtraso && receivable.diasAtraso > 0)
+                      ) && (
+                        <WhatsAppSender 
+                          receivable={receivable} 
+                          variant="collection"
+                        />
                       )}
                       
                       {receivable.telefone && (

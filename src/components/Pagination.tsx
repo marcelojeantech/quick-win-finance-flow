@@ -101,7 +101,7 @@ export function Pagination({
               variant={page === currentPage ? "default" : "outline"}
               size="sm"
               onClick={() => onPageChange(page as number)}
-              className="h-8 min-w-8 px-2"
+              className="h-8 min-w-[2rem] px-2"
             >
               {page}
             </Button>
